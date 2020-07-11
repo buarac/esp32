@@ -3,7 +3,7 @@
 
 static const char* TAG = "bme280";
 
-void bme280_device_info(void) {
+void bme280_device_info(i2c_device_t* dev) {
     ESP_LOGV(TAG, "information about bme280 device");
-    i2c_device_info();
+    i2c_device_info(dev);
 }
