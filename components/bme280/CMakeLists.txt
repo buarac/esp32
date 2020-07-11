@@ -1,5 +1,6 @@
-set(COMPONENT_ADD_INCLUDEDIRS include)
-set(COMPONENT_PRIV_INCLUDEDIRS "include")
-set(COMPONENT_SRCS "bme280.c")
-
-register_component()
+idf_component_register(
+    SRCS "bme280.c"
+    INCLUDE_DIRS include
+    PRIV_INCLUDE_DIRS "include"
+    REQUIRES i2c_device
+)
