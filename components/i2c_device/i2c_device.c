@@ -26,7 +26,7 @@ esp_err_t i2c_device_init(i2c_device_t* device, i2c_port_t port, uint8_t addr, u
 }
 
 esp_err_t i2c_device_read(i2c_device_t* device, void* out_data, size_t out_size, void* in_data, size_t in_size) {
-    ESP_LOGV(TAG, "i2c_device_read");
+    ESP_LOGV(TAG, "i2c_device_read(len=%d)", in_size);
 
     if ( (device==NULL) || (in_data==NULL) || (in_size <= 0) ) {
         ESP_LOGE(TAG, "i2c device read invalid args");
@@ -55,7 +55,7 @@ esp_err_t i2c_device_read(i2c_device_t* device, void* out_data, size_t out_size,
 }
 
 esp_err_t i2c_device_write(i2c_device_t* device, void* reg_data, size_t reg_size, void* out_data, size_t out_size) {
-    ESP_LOGV(TAG, "i2c_device_write");
+    ESP_LOGV(TAG, "i2c_device_write(len=%d)", out_size);
     
     if ( (device==NULL) || (out_data==NULL) || (out_size <= 0) ) {
         ESP_LOGE(TAG, "i2c device write invalid args");
@@ -78,5 +78,43 @@ esp_err_t i2c_device_write(i2c_device_t* device, void* reg_data, size_t reg_size
     }
     i2c_cmd_link_delete(cmd);    
 
+    return ret;
+}
+
+esp_err_t i2c_device_read_reg_uint8(i2c_device_t* device, uint8_t reg, uint8_t* data) {
+    ESP_LOGV(TAG, "i2c_device_read_reg_uint8");
+
+    uint8_t reg_data = reg;
+    return i2c_device_read(device, &reg_data, 1, data, 1);
+}
+
+esp_err_t i2c_device_read_reg_int8(i2c_device_t* device, uint8_t reg, int8_t* data) {
+    ESP_LOGV(TAG, "i2c_device_read_reg_int8");
+
+    uint8_t reg_data = reg;
+    return i2c_device_read(device, &reg_data, 1, data, 1);
+}
+
+esp_err_t i2c_device_read_reg_uint16(i2c_device_t* device, uint8_t reg, uint16_t* data) {
+    ESP_LOGV(TAG, "i2c_device_read_reg_uint16");
+
+    uint8_t reg_data = reg;
+    uint8_t out[2];
+
+    esp_err_t ret = i2c_device_read(device, &reg_data, 1, out, 2);
+
+    *data = ( out[0] << 8 | out[1] );
+    return ret;
+}
+
+esp_err_t i2c_device_read_reg_int16(i2c_device_t* device, uint8_t reg, int16_t* data) {
+    ESP_LOGV(TAG, "i2c_device_read_reg_int16");
+
+    uint8_t reg_data = reg;
+    uint8_t out[2];
+
+    esp_err_t ret = i2c_device_read(device, &reg_data, 1, out, 2);
+
+    *data = (int16_t)( out[0] << 8 | out[1] );
     return ret;
 }
