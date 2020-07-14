@@ -48,7 +48,7 @@ esp_err_t i2c_device_read(i2c_device_t* device, void* out_data, size_t out_size,
 
     ret = i2c_master_cmd_begin(device->port, cmd, 1000/portTICK_RATE_MS);
     if ( ret != ESP_OK ) {
-        ESP_LOGE(TAG, "Fail to read decice ( port = %d, addr = %02x )", device->port, device->addr);
+        ESP_LOGE(TAG, "Fail to read device ( port = %d, addr = %02x )", device->port, device->addr);
     }
     i2c_cmd_link_delete(cmd);
     return ret;

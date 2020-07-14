@@ -26,14 +26,6 @@ esp_err_t bme280_sensor_app_init(void) {
 
     bme280_params_default(&bme, &bme_params);
 
-    ESP_LOGI(TAG, "bme280 default params output");
-    ESP_LOGI(TAG, "mode = %d", bme_params.mode);
-    ESP_LOGI(TAG, "filter = %d", bme_params.filter);
-    ESP_LOGI(TAG, "standby = %d", bme_params.standby);
-    ESP_LOGI(TAG, "temp oversampling = %d", bme_params.over_samp_temp);
-    ESP_LOGI(TAG, "humi oversampling = %d", bme_params.over_samp_humi);
-    ESP_LOGI(TAG, "pres oversampling = %d", bme_params.over_samp_pres);
-
     ret = bme280_init_params(&bme, &bme_params);
     if ( ret != ESP_OK ) {
         ESP_LOGE(TAG, "bme280 failed to init");
@@ -41,23 +33,21 @@ esp_err_t bme280_sensor_app_init(void) {
         return ret;
     }
 
-    while(1) {
+    bme280_measure_t m;
 
-        bme280_raw_data_t raw;
+   while(1) {
 
-        ret = bme280_read_raw_forced(&bme, &raw);
+       ret = bme280_status_get(&bme);
+       ESP_LOGI(TAG, "status.im_update: %d", bme.status.bits.im_update);
+       ESP_LOGI(TAG, "status.measuring: %d", bme.status.bits.measuring);
+
+        ret = bme280_read_forced(&bme, &m);
         if ( ret != ESP_OK ) {
-            ESP_LOGE(TAG, "failed to read raw data");
+            ESP_LOGE(TAG, "failed to read data");
             return ret;
         }
 
-        int32_t fine_temp;
-        int32_t comp_temp = bme280_compensate_temperature(&bme, raw.temp, &fine_temp);
-        ESP_LOGI(TAG, "temperature output");
-        ESP_LOGI(TAG, "raw temperature: %d", raw.temp);
-        ESP_LOGI(TAG, "fine temperature: %d", fine_temp);
-        ESP_LOGI(TAG, "comp temperature: %d", comp_temp);
-        ESP_LOGI(TAG, "temperature: %.2f", (float)(comp_temp/100.0f));
+        ESP_LOGI(TAG, "temperature: %.2f", m.temp);
 
         vTaskDelay(5000/portTICK_RATE_MS);
     }

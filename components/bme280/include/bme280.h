@@ -60,32 +60,6 @@ typedef enum {
 } bme280_filter_t;
 
 typedef struct {
-    i2c_device_t    device;
-    uint8_t         chip_id;
-
-    // donnees de calibrage
-    uint16_t        dig_t1;
-    int16_t         dig_t2;
-    int16_t         dig_t3;
-    uint16_t        dig_p1;
-    int16_t         dig_p2;
-    int16_t         dig_p3;
-    int16_t         dig_p4;
-    int16_t         dig_p5;
-    int16_t         dig_p6;
-    int16_t         dig_p7;
-    int16_t         dig_p8;
-    int16_t         dig_p9;
-    // donnees de calibrage humidite
-    uint8_t         dig_h1;
-    int16_t         dig_h2;
-    uint8_t         dig_h3;
-    int16_t         dig_h4;
-    int16_t         dig_h5;
-    int8_t          dig_h6;
-} bme280_t;
-
-typedef struct {
     bme280_filter_t         filter;
     bme280_mode_t           mode;
     bme280_oversampling_t   over_samp_temp;
@@ -136,6 +110,39 @@ typedef struct {
     uint32_t    humi;
 } bme280_raw_data_t;
 
+typedef struct {
+    float   temp;
+    float   humi;
+    float   pres;
+} bme280_measure_t;
+
+typedef struct {
+    i2c_device_t    device;
+    uint8_t         chip_id;
+    bme280_status_t status;
+
+    // donnees de calibrage
+    uint16_t        dig_t1;
+    int16_t         dig_t2;
+    int16_t         dig_t3;
+    uint16_t        dig_p1;
+    int16_t         dig_p2;
+    int16_t         dig_p3;
+    int16_t         dig_p4;
+    int16_t         dig_p5;
+    int16_t         dig_p6;
+    int16_t         dig_p7;
+    int16_t         dig_p8;
+    int16_t         dig_p9;
+    // donnees de calibrage humidite
+    uint8_t         dig_h1;
+    int16_t         dig_h2;
+    uint8_t         dig_h3;
+    int16_t         dig_h4;
+    int16_t         dig_h5;
+    int8_t          dig_h6;
+} bme280_t;
+
 esp_err_t bme280_init(bme280_t* bme, i2c_port_t port, uint8_t addr, uint8_t sda, uint8_t scl);
 esp_err_t bme280_init_params(bme280_t* bme, bme280_params_t* params);
 void      bme280_params_default(bme280_t* bme, bme280_params_t* params);
@@ -143,13 +150,15 @@ esp_err_t bme280_done(bme280_t* bme);
 
 esp_err_t bme280_chip_id_get(bme280_t* bme);  
 esp_err_t bme280_soft_reset(bme280_t* bme);
+esp_err_t bme280_status_get(bme280_t* bme);
 
 esp_err_t bme280_cal_data_get(bme280_t* bme);
 esp_err_t bme280_cal_humi_data_get(bme280_t* bme);
 
 esp_err_t bme280_read_raw(bme280_t* bme, bme280_raw_data_t* raw_data);
 esp_err_t bme280_read_raw_forced(bme280_t* bme, bme280_raw_data_t* raw_data);
+esp_err_t bme280_read_forced(bme280_t* bme, bme280_measure_t* measure);
 
-int32_t bme280_compensate_temperature(bme280_t *bme, int32_t temp, int32_t *fine_temp);
+//int32_t bme280_compensate_temperature(bme280_t *bme, int32_t temp, int32_t *fine_temp);
 
 #endif // _BME280_DEVICE_H_
