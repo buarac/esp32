@@ -35,11 +35,7 @@ esp_err_t bme280_sensor_app_init(void) {
 
     bme280_measure_t m;
 
-   while(1) {
-
-       ret = bme280_status_get(&bme);
-       ESP_LOGI(TAG, "status.im_update: %d", bme.status.bits.im_update);
-       ESP_LOGI(TAG, "status.measuring: %d", bme.status.bits.measuring);
+    while(1) {
 
         ret = bme280_read_forced(&bme, &m);
         if ( ret != ESP_OK ) {
@@ -47,7 +43,9 @@ esp_err_t bme280_sensor_app_init(void) {
             return ret;
         }
 
-        ESP_LOGI(TAG, "temperature: %.2f", m.temp);
+        ESP_LOGI(TAG, "temperature : % 7.2f C", m.temp);
+        ESP_LOGI(TAG, "humidity    : % 7.2f ", m.humi);
+        ESP_LOGI(TAG, "pressure    : % 7.2f hPa", m.pres / 100.0);
 
         vTaskDelay(5000/portTICK_RATE_MS);
     }

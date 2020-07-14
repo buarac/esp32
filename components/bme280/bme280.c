@@ -4,6 +4,58 @@
 
 static const char *TAG = "bme280";
 
+static inline esp_err_t bme280_wait_measure_done(bme280_t* bme) {
+    ESP_LOGD(TAG, "waiting for measure done");
+
+    uint8_t measure_done = 0;
+    esp_err_t ret;
+    bme280_status_t     status;
+    bme280_ctrl_temp_t  ctrl;
+    uint8_t data[2];
+    uint8_t reg = BME280_REG_STATUS;
+
+    while ( !measure_done ) {
+
+        ret = i2c_device_read (&bme->device, &reg, 1, data, 2);
+        if ( ret != ESP_OK ) {
+            ESP_LOGE(TAG, "failed to read status & ctrl_temp registers");
+            return ret;
+        }
+        status.data = data[0];
+        ctrl.data = data[1];
+
+        ESP_LOGD(TAG, "mode = %d", ctrl.bits.mode);
+        ESP_LOGD(TAG, "measuring = %d", status.bits.measuring);
+
+        if ( ctrl.bits.mode == BME280_SLEEP_MODE && status.bits.measuring == 0 ) {
+            measure_done = 1;
+        }
+    }
+    ESP_LOGD(TAG, "measure done");
+    return ESP_OK;
+}
+
+static inline esp_err_t bme280_wait_nvm_copied(bme280_t* bme) {
+    ESP_LOGD(TAG, "waiting for nvm data copied");
+    uint8_t nvm_copied = 0;
+    esp_err_t ret;
+    uint16_t attempts = 0;
+
+    while ( !nvm_copied ) {
+        ret = i2c_device_read_reg_uint8 (&bme->device, BME280_REG_STATUS, &bme->status.data);
+        if ( ret != ESP_OK ) {
+            ESP_LOGE(TAG, "failed to read status register");
+            return ret;
+        }    
+        if ( bme->status.bits.im_update == 0 ) {
+            nvm_copied = 1;
+        }
+        ++attempts;
+    }
+    ESP_LOGD(TAG, "nvm data copied (%d attempt(s))", attempts);
+    return ESP_OK;
+}
+
 esp_err_t bme280_init(bme280_t *bme, i2c_port_t port, uint8_t addr, uint8_t sda, uint8_t scl)
 {
     ESP_LOGV(TAG, "bme280_init()");
@@ -24,13 +76,6 @@ esp_err_t bme280_init(bme280_t *bme, i2c_port_t port, uint8_t addr, uint8_t sda,
         return ret;
     }
 
-    // check if bme280 device
-    bme280_chip_id_get(bme);
-    if (bme->chip_id != BME280_CHIP_ID)
-    {
-        ESP_LOGE(TAG, "Not a bme280 device. expected chip id = %d, found %d", BME280_CHIP_ID, bme->chip_id);
-        return ESP_ERR_INVALID_ARG;
-    }
 
     ret = bme280_soft_reset(bme);
     if (ret != ESP_OK)
@@ -38,7 +83,16 @@ esp_err_t bme280_init(bme280_t *bme, i2c_port_t port, uint8_t addr, uint8_t sda,
         ESP_LOGE(TAG, "soft reset failed");
         return ret;
     }
-    vTaskDelay(1/portTICK_RATE_MS);
+
+    bme280_wait_nvm_copied(bme);
+
+    // check if bme280 device
+    bme280_chip_id_get(bme);
+    if (bme->chip_id != BME280_CHIP_ID)
+    {
+        ESP_LOGE(TAG, "Not a bme280 device. expected chip id = %d, found %d", BME280_CHIP_ID, bme->chip_id);
+        return ESP_ERR_INVALID_ARG;
+    }
 
     // load calibrate registers
     ret = bme280_cal_data_get(bme);
@@ -155,6 +209,7 @@ esp_err_t bme280_cal_data_get(bme280_t *bme)
     uint8_t val[24];
 
     i2c_device_read(dev, &reg, 1, val, 24);
+    
 
     bme->dig_t1 = (uint16_t)(val[1] << 8 | val[0]);
     bme->dig_t2 = (int16_t)(val[3] << 8 | val[2]);
@@ -170,20 +225,21 @@ esp_err_t bme280_cal_data_get(bme280_t *bme)
     bme->dig_p9 = (int16_t)(val[23] << 8 | val[22]);
 
     /*
-    ESP_LOGD(TAG, "calibration data output");
-    ESP_LOGD(TAG, "dig_t1 = %d, %04x", bme->dig_t1, bme->dig_t1);
-    ESP_LOGD(TAG, "dig_t2 = %d, %04x", bme->dig_t2, bme->dig_t2);
-    ESP_LOGD(TAG, "dig_t3 = %d, %04x", bme->dig_t3, bme->dig_t3);
-    ESP_LOGD(TAG, "dig_p1 = %d, %04x", bme->dig_p1, bme->dig_p1);
-    ESP_LOGD(TAG, "dig_p2 = %d, %04x", bme->dig_p2, bme->dig_p2);
-    ESP_LOGD(TAG, "dig_p3 = %d, %04x", bme->dig_p3, bme->dig_p3);
-    ESP_LOGD(TAG, "dig_p4 = %d, %04x", bme->dig_p4, bme->dig_p4);
-    ESP_LOGD(TAG, "dig_p5 = %d, %04x", bme->dig_p5, bme->dig_p5);
-    ESP_LOGD(TAG, "dig_p6 = %d, %04x", bme->dig_p6, bme->dig_p6);
-    ESP_LOGD(TAG, "dig_p7 = %d, %04x", bme->dig_p7, bme->dig_p7);
-    ESP_LOGD(TAG, "dig_p8 = %d, %04x", bme->dig_p8, bme->dig_p8);
-    ESP_LOGD(TAG, "dig_p9 = %d, %04x", bme->dig_p9, bme->dig_p9);
+    ESP_LOGW(TAG, "calibration data output");
+    ESP_LOGW(TAG, "dig_t1 = %d, %04x", bme->dig_t1, bme->dig_t1);
+    ESP_LOGW(TAG, "dig_t2 = %d, %04x", bme->dig_t2, bme->dig_t2);
+    ESP_LOGW(TAG, "dig_t3 = %d, %04x", bme->dig_t3, bme->dig_t3);
+    ESP_LOGW(TAG, "dig_p1 = %d, %04x", bme->dig_p1, bme->dig_p1);
+    ESP_LOGW(TAG, "dig_p2 = %d, %04x", bme->dig_p2, bme->dig_p2);
+    ESP_LOGW(TAG, "dig_p3 = %d, %04x", bme->dig_p3, bme->dig_p3);
+    ESP_LOGW(TAG, "dig_p4 = %d, %04x", bme->dig_p4, bme->dig_p4);
+    ESP_LOGW(TAG, "dig_p5 = %d, %04x", bme->dig_p5, bme->dig_p5);
+    ESP_LOGW(TAG, "dig_p6 = %d, %04x", bme->dig_p6, bme->dig_p6);
+    ESP_LOGW(TAG, "dig_p7 = %d, %04x", bme->dig_p7, bme->dig_p7);
+    ESP_LOGW(TAG, "dig_p8 = %d, %04x", bme->dig_p8, bme->dig_p8);
+    ESP_LOGW(TAG, "dig_p9 = %d, %04x", bme->dig_p9, bme->dig_p9);
     */
+
     return ret;
 }
 
@@ -216,6 +272,95 @@ esp_err_t bme280_cal_humi_data_get(bme280_t *bme)
     return ret;
 }
 
+static inline uint32_t bme280_compensate_humidity(bme280_t* bme, int32_t humi, int32_t fine_temp) {
+    ESP_LOGV(TAG, "bme280_compensate_humidity");
+    
+    int32_t v_x1_u32r;
+    
+    v_x1_u32r = (fine_temp - ((int32_t)76800));
+
+    v_x1_u32r = (((((humi << 14) - (((int32_t)bme->dig_h4) << 20) - (((int32_t)bme->dig_h5) * v_x1_u32r)) + ((int32_t)16384)) >> 15) * (((((((v_x1_u32r * ((int32_t)bme->dig_h6)) >> 10) * (((v_x1_u32r * ((int32_t)bme->dig_h3)) >> 11) + ((int32_t)32768))) >> 10) + ((int32_t)2097152)) * ((int32_t)bme->dig_h2) + 8192) >> 14));
+    v_x1_u32r = (v_x1_u32r - (((((v_x1_u32r >> 15) * (v_x1_u32r >> 15)) >> 7) * ((int32_t)bme->dig_h1)) >> 4));
+    v_x1_u32r = (v_x1_u32r < 0 ? 0 : v_x1_u32r);
+    v_x1_u32r = (v_x1_u32r > 419430400 ? 419430400 : v_x1_u32r);
+    v_x1_u32r = ( v_x1_u32r >> 12 );
+
+    ESP_LOGD(TAG, "compensate humidity output");
+    ESP_LOGD(TAG, "fine_temp = %d", fine_temp);
+    ESP_LOGD(TAG, "raw humi  = %d", humi);
+    ESP_LOGD(TAG, "comp humi = %d", v_x1_u32r);
+
+    return v_x1_u32r;
+
+}
+
+static inline uint32_t bme280_compensate_pressure(bme280_t* bme, int32_t pres, int32_t fine_temp) {
+    ESP_LOGV(TAG, "bme280_compensate_pressure");
+
+    int64_t var1, var2, p;
+
+    var1 = ((int64_t)fine_temp) - 128000;
+    var2 = var1 * var1 * (int64_t)bme->dig_p6;
+    var2 = var2 + ((var1*(int64_t)bme->dig_p5)<<17);
+    var2 = var2 + (((int64_t)bme->dig_p4)<<35);
+    var1 = ((var1 * var1 * (int64_t)bme->dig_p3)>>8);
+    var1 = (((((int64_t)1)<<47)+var1))*((int64_t)bme->dig_p1)>>33; 
+    if (var1 == 0) {
+        p = 0;
+    }
+    else {
+        p = 1048576-pres;
+        p = (((p<<31)-var2)*3125)/var1;
+        var1 = (((int64_t)bme->dig_p9) * (p>>13) * (p>>13)) >> 25; 
+        var2 = (((int64_t)bme->dig_p8) * p) >> 19;
+        p = ((p + var1 + var2) >> 8) + (((int64_t)bme->dig_p7)<<4);
+    }
+
+    ESP_LOGD(TAG, "compensate pressure output");
+    ESP_LOGD(TAG, "fine_temp = %d", fine_temp);
+    ESP_LOGD(TAG, "raw pres  = %d", pres);
+    ESP_LOGD(TAG, "comp pres = %llu", p);
+
+    return p;
+}
+
+/*
+static inline int32_t bme280_compensate_temperature2(bme280_t* bme, int32_t temp, int32_t *fine_temp) {
+    ESP_LOGV(TAG, "bme280_compensate_temperature2");
+
+    int32_t var1;
+    int32_t var2;
+    int32_t temperature;
+    int32_t temperature_min = -4000;
+    int32_t temperature_max = 8500;
+
+    var1 = (int32_t)((temp / 8) - ((int32_t)bme->dig_t1 * 2));
+    var1*= (int32_t)bme->dig_t2 / 2048;
+    var2 = (int32_t)((temp/ 16) - ((int32_t)bme->dig_t1));
+    var2 = (((var2 * var2) / 4096) * ((int32_t)bme->dig_t3)) / 16384;
+    *fine_temp = var1 + var2;
+    temperature = (*fine_temp * 5 + 128) / 256;
+
+    if (temperature < temperature_min)
+    {
+        temperature = temperature_min;
+    }
+    else if (temperature > temperature_max)
+    {
+        temperature = temperature_max;
+    }
+
+    ESP_LOGD(TAG, "compensate temperature2 output");
+    ESP_LOGD(TAG, "var1 = %d", var1);
+    ESP_LOGD(TAG, "var2 = %d", var2);
+    ESP_LOGD(TAG, "fine_temp = %d", *fine_temp);
+    ESP_LOGD(TAG, "raw temp  = %d", temp);
+    ESP_LOGD(TAG, "comp_temp = %d", temperature);
+
+    return temperature;
+}
+*/
+
 static inline int32_t bme280_compensate_temperature(bme280_t *bme, int32_t temp, int32_t *fine_temp)
 {
     ESP_LOGV(TAG, "bme280_compensate_temperature");
@@ -226,13 +371,19 @@ static inline int32_t bme280_compensate_temperature(bme280_t *bme, int32_t temp,
     var1 *= (bme->dig_t2 >> 11);
 
     var2 = ((temp >> 4) - bme->dig_t1);
-    var2 *= (((temp >> 4) - bme->dig_t1));
-    var2 = var2 >> 12;
-    var2 *= (bme->dig_t3);
-    var2 = var2 >> 14;
+    var2 = (var2 * var2) >> 12;
+    var2*= (bme->dig_t3 >> 14);
 
     *fine_temp = var1 + var2;
     comp_temp = (*fine_temp * 5 + 128) >> 8;
+
+    ESP_LOGD(TAG, "compensate temperature output");
+    ESP_LOGD(TAG, "var1 = %d", var1);
+    ESP_LOGD(TAG, "var2 = %d", var2);
+    ESP_LOGD(TAG, "fine_temp = %d", *fine_temp);
+    ESP_LOGD(TAG, "raw temp  = %d", temp);
+    ESP_LOGD(TAG, "comp_temp = %d", comp_temp);
+
 
     return comp_temp;
 }
@@ -246,6 +397,8 @@ esp_err_t bme280_read_forced(bme280_t *bme, bme280_measure_t *measure)
     bme280_measure_t m;
     int32_t fine_temp;
     int32_t comp_temp;
+    uint32_t comp_humi;
+    uint32_t comp_pres;
 
     ret = bme280_read_raw_forced(bme, &raw_data);
     if (ret != ESP_OK)
@@ -255,7 +408,11 @@ esp_err_t bme280_read_forced(bme280_t *bme, bme280_measure_t *measure)
     }
 
     comp_temp = bme280_compensate_temperature(bme, raw_data.temp, &fine_temp);
+    comp_humi = bme280_compensate_humidity(bme, raw_data.humi, fine_temp);
+    comp_pres = bme280_compensate_pressure(bme, raw_data.pres, fine_temp);
     m.temp = (float)comp_temp / 100.0f;
+    m.humi = (float)comp_humi / 1024.0f;
+    m.pres = (float)comp_pres / 256.0f;
 
     memset(measure, 0, sizeof(bme280_measure_t));
     memcpy(measure, &m, sizeof(bme280_measure_t));
@@ -287,6 +444,7 @@ esp_err_t bme280_read_raw_forced(bme280_t *bme, bme280_raw_data_t *raw_data)
     }
 
     // wait mode back to sleep_mode
+    /*
     uint8_t measure_finished = 0;
     while (measure_finished == 0)
     {
@@ -302,6 +460,9 @@ esp_err_t bme280_read_raw_forced(bme280_t *bme, bme280_raw_data_t *raw_data)
         }
         vTaskDelay(1 / portTICK_RATE_MS);
     }
+    */
+    ret = bme280_wait_measure_done (bme);
+
     return bme280_read_raw(bme, raw_data);
 }
 
