@@ -56,6 +56,29 @@ static inline esp_err_t bme280_wait_nvm_copied(bme280_t* bme) {
     return ESP_OK;
 }
 
+esp_err_t bme280_init_default(bme280_t* bme) {
+    ESP_LOGV(TAG, "bme280_init()");
+
+    esp_err_t ret = bme280_init(bme, BME280_I2C_PORT, BME280_I2C_ADDR, BME280_I2C_SDA, BME280_I2C_SCL);
+    if ( ret != ESP_OK ) {
+        ESP_LOGE(TAG, "init failed");
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "bme 280 chip id = 0x%02x", bme->chip_id);
+
+    bme280_params_t params;
+    bme280_params_default(bme, &params);
+
+    ret = bme280_init_params(bme, &params);
+    if ( ret != ESP_OK ) {
+        ESP_LOGE(TAG, "bme280 failed to set params");
+        return ret;
+    }
+
+    return ret;
+}
+
 esp_err_t bme280_init(bme280_t *bme, i2c_port_t port, uint8_t addr, uint8_t sda, uint8_t scl)
 {
     ESP_LOGV(TAG, "bme280_init()");
@@ -412,7 +435,7 @@ esp_err_t bme280_read_forced(bme280_t *bme, bme280_measure_t *measure)
     comp_pres = bme280_compensate_pressure(bme, raw_data.pres, fine_temp);
     m.temp = (float)comp_temp / 100.0f;
     m.humi = (float)comp_humi / 1024.0f;
-    m.pres = (float)comp_pres / 256.0f;
+    m.pres = (float)comp_pres / 256.0f / 100.0f;
 
     memset(measure, 0, sizeof(bme280_measure_t));
     memcpy(measure, &m, sizeof(bme280_measure_t));
@@ -443,24 +466,6 @@ esp_err_t bme280_read_raw_forced(bme280_t *bme, bme280_raw_data_t *raw_data)
         return ret;
     }
 
-    // wait mode back to sleep_mode
-    /*
-    uint8_t measure_finished = 0;
-    while (measure_finished == 0)
-    {
-        ret = i2c_device_read(&bme->device, &reg, 1, &ctrl.data, 1);
-        if (ret != ESP_OK)
-        {
-            ESP_LOGE(TAG, "failed waiting device back to sleep mode");
-            return ret;
-        }
-        if (ctrl.bits.mode == BME280_SLEEP_MODE)
-        {
-            measure_finished = 1;
-        }
-        vTaskDelay(1 / portTICK_RATE_MS);
-    }
-    */
     ret = bme280_wait_measure_done (bme);
 
     return bme280_read_raw(bme, raw_data);

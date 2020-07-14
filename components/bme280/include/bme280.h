@@ -3,6 +3,12 @@
 
 #include "i2c_device.h"
 
+
+#define BME280_I2C_PORT CONFIG_BME280_I2C_PORT
+#define BME280_I2C_ADDR CONFIG_BME280_I2C_ADDR
+#define BME280_I2C_SDA  CONFIG_BME280_I2C_SDA
+#define BME280_I2C_SCL  CONFIG_BME280_I2C_SCL
+
 // BME280 registers
 #define BME280_REG_CHIP_ID  0xd0
 #define BME280_REG_RESET    0xe0
@@ -143,6 +149,7 @@ typedef struct {
     int8_t          dig_h6;
 } bme280_t;
 
+esp_err_t bme280_init_default(bme280_t* bme);
 esp_err_t bme280_init(bme280_t* bme, i2c_port_t port, uint8_t addr, uint8_t sda, uint8_t scl);
 esp_err_t bme280_init_params(bme280_t* bme, bme280_params_t* params);
 void      bme280_params_default(bme280_t* bme, bme280_params_t* params);
