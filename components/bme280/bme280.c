@@ -118,8 +118,7 @@ esp_err_t bme280_init(bme280_t *bme, i2c_port_t port, uint8_t addr, uint8_t sda,
     }
 
     // load calibrate registers
-    ret = bme280_cal_data_get(bme);
-    ret = bme280_cal_humi_data_get(bme);
+    ret = bme280_read_calib_data(bme);
 
     return ret;
 }
@@ -221,76 +220,55 @@ esp_err_t bme280_soft_reset(bme280_t *bme)
     return i2c_device_write(&bme->device, &reg, 1, &data, 1);
 }
 
-esp_err_t bme280_cal_data_get(bme280_t *bme)
+esp_err_t bme280_read_calib_data(bme280_t *bme)
 {
-    ESP_LOGV(TAG, "bme280_cal_data_get");
+    ESP_LOGV(TAG, "bme280_read_calib_data");
 
     esp_err_t ret = ESP_OK;
     i2c_device_t *dev = &bme->device;
+    bme280_calib_data_t calib;
     // read data
     uint8_t reg = 0x88;
     uint8_t val[24];
 
-    i2c_device_read(dev, &reg, 1, val, 24);
-    
+    ret = i2c_device_read(dev, &reg, 1, val, 24);
+    if ( ret != ESP_OK ) {
+        ESP_LOGE(TAG, "failed to read calib data");
+        return ret;
+    }
+    // temperature & pressure
+    calib.dig_t1 = (uint16_t)(val[1] << 8 | val[0]);
+    calib.dig_t2 = (int16_t)(val[3] << 8 | val[2]);
+    calib.dig_t3 = (int16_t)(val[5] << 8 | val[4]);
+    calib.dig_p1 = (uint16_t)(val[7] << 8 | val[6]);
+    calib.dig_p2 = (int16_t)(val[9] << 8 | val[8]);
+    calib.dig_p3 = (int16_t)(val[11] << 8 | val[10]);
+    calib.dig_p4 = (int16_t)(val[13] << 8 | val[12]);
+    calib.dig_p5 = (int16_t)(val[15] << 8 | val[14]);
+    calib.dig_p6 = (int16_t)(val[17] << 8 | val[16]);
+    calib.dig_p7 = (int16_t)(val[19] << 8 | val[18]);
+    calib.dig_p8 = (int16_t)(val[21] << 8 | val[20]);
+    calib.dig_p9 = (int16_t)(val[23] << 8 | val[22]);
+    // humidity
+    ret = i2c_device_read_reg_uint8(dev, 0xa1, &calib.dig_h1);
+    if ( ret != ESP_OK ) {
+        ESP_LOGE(TAG, "failed to read calib data");
+        return ret;
+    }
+    reg = 0xe1;
+    memset(val, 0, 7);
+    ret = i2c_device_read(dev, &reg, 1, val, 7);
+    if ( ret != ESP_OK ) {
+        ESP_LOGE(TAG, "failed to read calib data");
+        return ret;
+    }
+    calib.dig_h2 = (int16_t)(val[1] << 8 | val[0]);
+    calib.dig_h3 = (uint8_t)(val[2]);
+    calib.dig_h4 = (int16_t)(val[3] << 4 | (val[4] & 0x0f));
+    calib.dig_h5 = (int16_t)(((val[4] & 0xf0) >> 4) | val[5] << 4 );
+    calib.dig_h6 = (int8_t)(val[6]);
 
-    bme->dig_t1 = (uint16_t)(val[1] << 8 | val[0]);
-    bme->dig_t2 = (int16_t)(val[3] << 8 | val[2]);
-    bme->dig_t3 = (int16_t)(val[5] << 8 | val[4]);
-    bme->dig_p1 = (uint16_t)(val[7] << 8 | val[6]);
-    bme->dig_p2 = (int16_t)(val[9] << 8 | val[8]);
-    bme->dig_p3 = (int16_t)(val[11] << 8 | val[10]);
-    bme->dig_p4 = (int16_t)(val[13] << 8 | val[12]);
-    bme->dig_p5 = (int16_t)(val[15] << 8 | val[14]);
-    bme->dig_p6 = (int16_t)(val[17] << 8 | val[16]);
-    bme->dig_p7 = (int16_t)(val[19] << 8 | val[18]);
-    bme->dig_p8 = (int16_t)(val[21] << 8 | val[20]);
-    bme->dig_p9 = (int16_t)(val[23] << 8 | val[22]);
-
-    /*
-    ESP_LOGW(TAG, "calibration data output");
-    ESP_LOGW(TAG, "dig_t1 = %d, %04x", bme->dig_t1, bme->dig_t1);
-    ESP_LOGW(TAG, "dig_t2 = %d, %04x", bme->dig_t2, bme->dig_t2);
-    ESP_LOGW(TAG, "dig_t3 = %d, %04x", bme->dig_t3, bme->dig_t3);
-    ESP_LOGW(TAG, "dig_p1 = %d, %04x", bme->dig_p1, bme->dig_p1);
-    ESP_LOGW(TAG, "dig_p2 = %d, %04x", bme->dig_p2, bme->dig_p2);
-    ESP_LOGW(TAG, "dig_p3 = %d, %04x", bme->dig_p3, bme->dig_p3);
-    ESP_LOGW(TAG, "dig_p4 = %d, %04x", bme->dig_p4, bme->dig_p4);
-    ESP_LOGW(TAG, "dig_p5 = %d, %04x", bme->dig_p5, bme->dig_p5);
-    ESP_LOGW(TAG, "dig_p6 = %d, %04x", bme->dig_p6, bme->dig_p6);
-    ESP_LOGW(TAG, "dig_p7 = %d, %04x", bme->dig_p7, bme->dig_p7);
-    ESP_LOGW(TAG, "dig_p8 = %d, %04x", bme->dig_p8, bme->dig_p8);
-    ESP_LOGW(TAG, "dig_p9 = %d, %04x", bme->dig_p9, bme->dig_p9);
-    */
-
-    return ret;
-}
-
-esp_err_t bme280_cal_humi_data_get(bme280_t *bme)
-{
-    ESP_LOGV(TAG, "bme280_cal_humi_data_get");
-
-    esp_err_t ret = ESP_OK;
-    i2c_device_t *dev = &bme->device;
-    uint8_t raw[7];
-    uint8_t reg = 0xe1;
-
-    ret = i2c_device_read_reg_uint8(dev, 0xa1, &bme->dig_h1);
-    ret = i2c_device_read(dev, &reg, 1, raw, 7);
-
-    bme->dig_h2 = (int16_t)(raw[1] << 8 | raw[0]);
-    bme->dig_h3 = (uint8_t)(raw[2]);
-    bme->dig_h4 = (int16_t)(raw[3] << 4 | (raw[4] & 0x0f));
-    bme->dig_h5 = (int16_t)(((raw[4] & 0xf0) >> 4) | raw[5] << 4 );
-    bme->dig_h6 = (int8_t)(raw[6]);
-
-    ESP_LOGD(TAG, "humidity calibration data output");
-    ESP_LOGD(TAG, "dig_h1 = %d, %04x", bme->dig_h1, bme->dig_h1);
-    ESP_LOGD(TAG, "dig_h2 = %d, %04x", bme->dig_h2, bme->dig_h2);
-    ESP_LOGD(TAG, "dig_h3 = %d, %04x", bme->dig_h3, bme->dig_h3);
-    ESP_LOGD(TAG, "dig_h4 = %d, %04x", bme->dig_h4, bme->dig_h4);
-    ESP_LOGD(TAG, "dig_h5 = %d, %04x", bme->dig_h5, bme->dig_h5);
-    ESP_LOGD(TAG, "dig_h6 = %d, %04x", bme->dig_h6, bme->dig_h6);
+    memcpy(&bme->calib, &calib, sizeof(bme280_calib_data_t));
 
     return ret;
 }
@@ -302,8 +280,8 @@ static inline uint32_t bme280_compensate_humidity(bme280_t* bme, int32_t humi, i
     
     v_x1_u32r = (fine_temp - ((int32_t)76800));
 
-    v_x1_u32r = (((((humi << 14) - (((int32_t)bme->dig_h4) << 20) - (((int32_t)bme->dig_h5) * v_x1_u32r)) + ((int32_t)16384)) >> 15) * (((((((v_x1_u32r * ((int32_t)bme->dig_h6)) >> 10) * (((v_x1_u32r * ((int32_t)bme->dig_h3)) >> 11) + ((int32_t)32768))) >> 10) + ((int32_t)2097152)) * ((int32_t)bme->dig_h2) + 8192) >> 14));
-    v_x1_u32r = (v_x1_u32r - (((((v_x1_u32r >> 15) * (v_x1_u32r >> 15)) >> 7) * ((int32_t)bme->dig_h1)) >> 4));
+    v_x1_u32r = (((((humi << 14) - (((int32_t)bme->calib.dig_h4) << 20) - (((int32_t)bme->calib.dig_h5) * v_x1_u32r)) + ((int32_t)16384)) >> 15) * (((((((v_x1_u32r * ((int32_t)bme->calib.dig_h6)) >> 10) * (((v_x1_u32r * ((int32_t)bme->calib.dig_h3)) >> 11) + ((int32_t)32768))) >> 10) + ((int32_t)2097152)) * ((int32_t)bme->calib.dig_h2) + 8192) >> 14));
+    v_x1_u32r = (v_x1_u32r - (((((v_x1_u32r >> 15) * (v_x1_u32r >> 15)) >> 7) * ((int32_t)bme->calib.dig_h1)) >> 4));
     v_x1_u32r = (v_x1_u32r < 0 ? 0 : v_x1_u32r);
     v_x1_u32r = (v_x1_u32r > 419430400 ? 419430400 : v_x1_u32r);
     v_x1_u32r = ( v_x1_u32r >> 12 );
@@ -323,20 +301,20 @@ static inline uint32_t bme280_compensate_pressure(bme280_t* bme, int32_t pres, i
     int64_t var1, var2, p;
 
     var1 = ((int64_t)fine_temp) - 128000;
-    var2 = var1 * var1 * (int64_t)bme->dig_p6;
-    var2 = var2 + ((var1*(int64_t)bme->dig_p5)<<17);
-    var2 = var2 + (((int64_t)bme->dig_p4)<<35);
-    var1 = ((var1 * var1 * (int64_t)bme->dig_p3)>>8);
-    var1 = (((((int64_t)1)<<47)+var1))*((int64_t)bme->dig_p1)>>33; 
+    var2 = var1 * var1 * (int64_t)bme->calib.dig_p6;
+    var2 = var2 + ((var1*(int64_t)bme->calib.dig_p5)<<17);
+    var2 = var2 + (((int64_t)bme->calib.dig_p4)<<35);
+    var1 = ((var1 * var1 * (int64_t)bme->calib.dig_p3)>>8);
+    var1 = (((((int64_t)1)<<47)+var1))*((int64_t)bme->calib.dig_p1)>>33; 
     if (var1 == 0) {
         p = 0;
     }
     else {
         p = 1048576-pres;
         p = (((p<<31)-var2)*3125)/var1;
-        var1 = (((int64_t)bme->dig_p9) * (p>>13) * (p>>13)) >> 25; 
-        var2 = (((int64_t)bme->dig_p8) * p) >> 19;
-        p = ((p + var1 + var2) >> 8) + (((int64_t)bme->dig_p7)<<4);
+        var1 = (((int64_t)bme->calib.dig_p9) * (p>>13) * (p>>13)) >> 25; 
+        var2 = (((int64_t)bme->calib.dig_p8) * p) >> 19;
+        p = ((p + var1 + var2) >> 8) + (((int64_t)bme->calib.dig_p7)<<4);
     }
 
     ESP_LOGD(TAG, "compensate pressure output");
@@ -347,55 +325,18 @@ static inline uint32_t bme280_compensate_pressure(bme280_t* bme, int32_t pres, i
     return p;
 }
 
-/*
-static inline int32_t bme280_compensate_temperature2(bme280_t* bme, int32_t temp, int32_t *fine_temp) {
-    ESP_LOGV(TAG, "bme280_compensate_temperature2");
-
-    int32_t var1;
-    int32_t var2;
-    int32_t temperature;
-    int32_t temperature_min = -4000;
-    int32_t temperature_max = 8500;
-
-    var1 = (int32_t)((temp / 8) - ((int32_t)bme->dig_t1 * 2));
-    var1*= (int32_t)bme->dig_t2 / 2048;
-    var2 = (int32_t)((temp/ 16) - ((int32_t)bme->dig_t1));
-    var2 = (((var2 * var2) / 4096) * ((int32_t)bme->dig_t3)) / 16384;
-    *fine_temp = var1 + var2;
-    temperature = (*fine_temp * 5 + 128) / 256;
-
-    if (temperature < temperature_min)
-    {
-        temperature = temperature_min;
-    }
-    else if (temperature > temperature_max)
-    {
-        temperature = temperature_max;
-    }
-
-    ESP_LOGD(TAG, "compensate temperature2 output");
-    ESP_LOGD(TAG, "var1 = %d", var1);
-    ESP_LOGD(TAG, "var2 = %d", var2);
-    ESP_LOGD(TAG, "fine_temp = %d", *fine_temp);
-    ESP_LOGD(TAG, "raw temp  = %d", temp);
-    ESP_LOGD(TAG, "comp_temp = %d", temperature);
-
-    return temperature;
-}
-*/
-
 static inline int32_t bme280_compensate_temperature(bme280_t *bme, int32_t temp, int32_t *fine_temp)
 {
     ESP_LOGV(TAG, "bme280_compensate_temperature");
     int32_t var1, var2;
     int32_t comp_temp;
 
-    var1 = ((temp >> 3) - (bme->dig_t1 << 1));
-    var1 *= (bme->dig_t2 >> 11);
+    var1 = ((temp >> 3) - (bme->calib.dig_t1 << 1));
+    var1 *= (bme->calib.dig_t2 >> 11);
 
-    var2 = ((temp >> 4) - bme->dig_t1);
+    var2 = ((temp >> 4) - bme->calib.dig_t1);
     var2 = (var2 * var2) >> 12;
-    var2*= (bme->dig_t3 >> 14);
+    var2*= (bme->calib.dig_t3 >> 14);
 
     *fine_temp = var1 + var2;
     comp_temp = (*fine_temp * 5 + 128) >> 8;

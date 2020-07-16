@@ -123,10 +123,6 @@ typedef struct {
 } bme280_measure_t;
 
 typedef struct {
-    i2c_device_t    device;
-    uint8_t         chip_id;
-    bme280_status_t status;
-
     // donnees de calibrage
     uint16_t        dig_t1;
     int16_t         dig_t2;
@@ -147,6 +143,13 @@ typedef struct {
     int16_t         dig_h4;
     int16_t         dig_h5;
     int8_t          dig_h6;
+} bme280_calib_data_t;
+
+typedef struct {
+    i2c_device_t        device;
+    uint8_t             chip_id;
+    bme280_status_t     status;
+    bme280_calib_data_t calib;
 } bme280_t;
 
 esp_err_t bme280_init_default(bme280_t* bme);
@@ -159,8 +162,8 @@ esp_err_t bme280_chip_id_get(bme280_t* bme);
 esp_err_t bme280_soft_reset(bme280_t* bme);
 esp_err_t bme280_status_get(bme280_t* bme);
 
-esp_err_t bme280_cal_data_get(bme280_t* bme);
-esp_err_t bme280_cal_humi_data_get(bme280_t* bme);
+esp_err_t bme280_read_calib_data(bme280_t* bme);
+
 
 esp_err_t bme280_read_raw(bme280_t* bme, bme280_raw_data_t* raw_data);
 esp_err_t bme280_read_raw_forced(bme280_t* bme, bme280_raw_data_t* raw_data);
