@@ -80,12 +80,12 @@ esp_err_t sensor_app_init(void) {
         }
         ++cnt;
         printf("-------------------------\n");
-        printf("measure     : %07d\n", cnt);
+        printf("measure id  : %07d\n", cnt);
         printf("temperature : %7.2f C\n", m.temp);
         printf("humidity    : %7.2f\n", m.humi);
         printf("pressure    : %7.2f hPa\n", m.pres);
 
-        esp_now_send(master_mac, &m, sizeof(bme280_measure_t));
+        esp_now_send(master_mac, (void*)&m, sizeof(bme280_measure_t));
 
         vTaskDelay(5000/portTICK_RATE_MS);
     }
