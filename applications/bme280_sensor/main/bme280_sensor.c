@@ -5,6 +5,7 @@
 #include "esp_wifi.h"
 #include "esp_now.h"
 #include "bme280.h"
+#include "sensor.h"
 #include <string.h>
 
 #define ESPNOW_WIFI_MODE WIFI_MODE_STA
@@ -61,6 +62,10 @@ esp_err_t sensor_app_init(void) {
     
     esp_err_t ret = ESP_OK;
     uint32_t  cnt = 0;
+    sensor_info_t info;
+
+    info.type = BME280_SENSOR;
+    sensor_print_info(&info);
 
     ret = bme280_init_default(&bme);
     if ( ret  != ESP_OK ) {
