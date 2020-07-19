@@ -65,7 +65,6 @@ esp_err_t bme280_init_default(bme280_t* bme) {
         return ret;
     }
 
-    ESP_LOGI(TAG, "bme 280 chip id = 0x%02x", bme->chip_id);
 
     bme280_params_t params;
     bme280_params_default(bme, &params);
@@ -99,10 +98,22 @@ esp_err_t bme280_init(bme280_t *bme, i2c_port_t port, uint8_t addr, uint8_t sda,
         return ret;
     }
 
+    uint8_t reg = BME280_REG_CHIP_ID;
+
+    ret = i2c_device_read(&bme->device, &reg, 1, &bme->chip_id, 1);
+     if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "failed to read chip id register");
+        return ret;
+    }   
+
+    ESP_LOGI(TAG, "bme 280 chip id = 0x%02x", bme->chip_id);
+    if ( bme->chip_id != BME280_CHIP_ID ) {
+        ESP_LOGE(TAG, "Not a bme280 device, chip id = %d, expected = %d", bme->chip_id, BME280_CHIP_ID);
+        return ESP_FAIL;
+    }
 
     ret = bme280_soft_reset(bme);
-    if (ret != ESP_OK)
-    {
+    if (ret != ESP_OK) {
         ESP_LOGE(TAG, "soft reset failed");
         return ret;
     }
@@ -111,8 +122,7 @@ esp_err_t bme280_init(bme280_t *bme, i2c_port_t port, uint8_t addr, uint8_t sda,
 
     // check if bme280 device
     bme280_chip_id_get(bme);
-    if (bme->chip_id != BME280_CHIP_ID)
-    {
+    if (bme->chip_id != BME280_CHIP_ID) {
         ESP_LOGE(TAG, "Not a bme280 device. expected chip id = %d, found %d", BME280_CHIP_ID, bme->chip_id);
         return ESP_ERR_INVALID_ARG;
     }

@@ -1,6 +1,7 @@
 #ifndef _SENSOR_H_
 #define _SENSOR_H_
 
+
 typedef enum {
 
     BME280_SENSOR = 0x50

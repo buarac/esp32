@@ -117,6 +117,7 @@ typedef struct {
 } bme280_raw_data_t;
 
 typedef struct {
+ //   uint32_t id;
     float   temp;
     float   humi;
     float   pres;
