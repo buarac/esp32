@@ -28,15 +28,10 @@
 #include "esp_now.h"
 #include "esp_crc.h"
 
+#include "espnow_comp.h"
+
 
 /* ESPNOW can work in both station and softap mode. It is configured in menuconfig. */
-#if CONFIG_ESPNOW_WIFI_MODE_STATION
-#define ESPNOW_WIFI_MODE WIFI_MODE_STA
-#define ESPNOW_WIFI_IF   ESP_IF_WIFI_STA
-#else
-#define ESPNOW_WIFI_MODE WIFI_MODE_AP
-#define ESPNOW_WIFI_IF   ESP_IF_WIFI_AP
-#endif
 
 #define ESPNOW_QUEUE_SIZE           20
 
@@ -63,8 +58,6 @@ static const char *TAG = "espnow_master";
 
 static xQueueHandle master_queue;
 
-static uint8_t s_broadcast_addr[ESP_NOW_ETH_ALEN] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
-
 static char tmp_mac_addr[20];
 
 static inline void format_mac_addr(uint8_t* mac_addr) {
@@ -79,9 +72,7 @@ static inline void format_mac_addr(uint8_t* mac_addr) {
     );
 }
 
-static inline uint8_t is_broadcast_addr(uint8_t* addr) {
-    return (memcmp(addr, s_broadcast_addr, ESP_NOW_ETH_ALEN) == 0);
-}
+uint8_t my_broadcast_macaddr[ESP_NOW_ETH_ALEN] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
 /* ESPNOW sending or receiving callback function is called in WiFi task.
  * Users should not do lengthy operations from this task. Instead, post
@@ -128,32 +119,6 @@ static void app_espnow_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int
 
 
 
-static esp_err_t app_add_pear(uint8_t* addr) {
-    /* Add broadcast peer information to peer list. */
-     esp_err_t ret = ESP_OK;
-    if ( esp_now_is_peer_exist(addr)  == false ) {
-        esp_now_peer_info_t *peer = malloc(sizeof(esp_now_peer_info_t));
-        if (peer == NULL) {
-            ESP_LOGE(TAG, "Malloc peer information fail");
-            vSemaphoreDelete(master_queue);
-            esp_now_deinit();
-            return ESP_FAIL;
-        }
-        memset(peer, 0, sizeof(esp_now_peer_info_t));
-        peer->channel = CONFIG_ESPNOW_CHANNEL;
-        peer->ifidx = ESPNOW_WIFI_IF;
-        peer->encrypt = false;
-        memcpy(peer->peer_addr, addr, ESP_NOW_ETH_ALEN);
-        ret =  esp_now_add_peer(peer);
-        free(peer);
-        ESP_LOGI(TAG, "peer added");
-    }
-    else {
-        ESP_LOGI(TAG, "peer already exists");
-    }
-    return ret;
-}
-
 static void app_espnow_task(void *pvParameter) {
 
     master_event_t evt;
@@ -183,8 +148,8 @@ static void app_espnow_task(void *pvParameter) {
                     code = 1389;
                     // renvoyer le ping
                     //esp_now_send ( evt.addr, (void*)&code, 2);
-                    app_add_pear ( evt.addr );
-                    esp_now_send ( s_broadcast_addr, (void*)&code, 2);
+                    espnow_add_peer ( evt.addr );
+                    esp_now_send ( my_broadcast_macaddr, (void*)&code, 2);
                 }
             }
             free(evt.data);
@@ -192,37 +157,6 @@ static void app_espnow_task(void *pvParameter) {
     }
 }
 
-
-
-/* WiFi should start before using ESPNOW */
-static void app_wifi_init(void)
-{
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
-    ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM) );
-    ESP_ERROR_CHECK( esp_wifi_set_mode(ESPNOW_WIFI_MODE) );
-    ESP_ERROR_CHECK( esp_wifi_start());
-}
-
-static esp_err_t app_espnow_init(void) {
-
-    master_queue = xQueueCreate(ESPNOW_QUEUE_SIZE, sizeof(master_event_t));
-    if (master_queue == NULL) {
-        ESP_LOGE(TAG, "Create mutex fail");
-        return ESP_FAIL;
-    }
-
-    /* Initialize ESPNOW and register sending and receiving callback function. */
-    ESP_ERROR_CHECK( esp_now_init() );
-    ESP_ERROR_CHECK( esp_now_register_send_cb(app_espnow_send_cb) );
-    ESP_ERROR_CHECK( esp_now_register_recv_cb(app_espnow_recv_cb) );
-
-    ESP_ERROR_CHECK( app_add_pear(s_broadcast_addr) );
-
-    return ESP_OK;
-}
 
 void app_main(void)  {
     // Initialize NVS
@@ -233,9 +167,16 @@ void app_main(void)  {
     }
     ESP_ERROR_CHECK( ret );
 
-    app_wifi_init();
-    app_espnow_init();
+    master_queue = xQueueCreate(ESPNOW_QUEUE_SIZE, sizeof(master_event_t));
+    if (master_queue == NULL) {
+        ESP_LOGE(TAG, "Create mutex fail");
+        return;
+    }
+
+    espnow_init(app_espnow_send_cb, app_espnow_recv_cb, NULL);
 
 
     xTaskCreate(app_espnow_task, "app_espnow_task", 2048, NULL, 4, NULL);
+
+    set_sensor_state(SENSOR_NOT_CONFIGURED);
 }
